@@ -1,8 +1,9 @@
 """OwnedData views implementation."""
 from ast import literal_eval
+from multiprocessing.sharedctypes import Value
 import operator
 from distutils.sysconfig import customize_compiler
-from typing import Any, Dict, Optional, Union, List, Tuple, Callable
+from typing import Any, Dict, Optional, Set, Union, List, Tuple, Callable
 from matplotlib.pyplot import isinteractive
 from rest_framework import viewsets
 import string
@@ -12,6 +13,8 @@ from django.contrib.auth import get_user_model
 from django.db.models.query import QuerySet
 from django.db.models import Q
 from django.contrib.auth.models import AnonymousUser
+from rest_framework.exceptions import PermissionDenied
+from django.contrib.auth.models import Group, Permission, AbstractBaseUser
 
 
 class CollaborateType(Enum):
@@ -22,44 +25,44 @@ class CollaborateType(Enum):
     DELETE = "delete"
     HEAD = "head"
     OPTIONS = "options"
-    ALL_EXCEPT_GET = "all_except_get"
+    # ALL_EXCEPT_GET = "all_except_get"
 
 
-class BaseOwnedDataViewSet(ABC):
-    """Base class for OwnedDataViewSet to fore implementing the required methods."""
+# class BaseOwnedDataViewSet(ABC):
+#     """Base class for OwnedDataViewSet to fore implementing the required methods."""
 
-    @abstractmethod
-    def owned_data_collaborators_on_get(
-        self, request: "Request", payload: Any, query: Dict, user: Optional["User"]
-    ) -> bool:
-        pass
+#     @abstractmethod
+#     def owned_data_collaborators_on_get(
+#         self, request: "Request", payload: Any, query: Dict, user: Optional["User"]
+#     ) -> bool:
+#         pass
 
-    @abstractmethod
-    def owned_data_collaborators_on_post(
-        self, request: "Request", payload: Any, query: Dict, user: Optional["User"]
-    ) -> bool:
-        pass
+#     @abstractmethod
+#     def owned_data_collaborators_on_post(
+#         self, request: "Request", payload: Any, query: Dict, user: Optional["User"]
+#     ) -> bool:
+#         pass
 
-    @abstractmethod
-    def owned_data_collaborators_on_put(
-        self, request: "Request", payload: Any, query: Dict, user: Optional["User"]
-    ) -> bool:
-        pass
+#     @abstractmethod
+#     def owned_data_collaborators_on_put(
+#         self, request: "Request", payload: Any, query: Dict, user: Optional["User"]
+#     ) -> bool:
+#         pass
 
-    @abstractmethod
-    def owned_data_collaborators_on_patch(
-        self, request: "Request", payload: Any, query: Dict, user: Optional["User"]
-    ) -> bool:
-        pass
+#     @abstractmethod
+#     def owned_data_collaborators_on_patch(
+#         self, request: "Request", payload: Any, query: Dict, user: Optional["User"]
+#     ) -> bool:
+#         pass
 
-    @abstractmethod
-    def owned_data_collaborators_on_delete(
-        self, request: "Request", payload: Any, query: Dict, user: Optional["User"]
-    ) -> bool:
-        pass
+#     @abstractmethod
+#     def owned_data_collaborators_on_delete(
+#         self, request: "Request", payload: Any, query: Dict, user: Optional["User"]
+#     ) -> bool:
+#         pass
 
 
-class OwnedDataViewSet(viewsets.GenericViewSet):
+class OwnedDataViewSet(viewsets.ModelViewSet): # viewsets.GenericViewSet, 
     """OwnedData viewset implementation.
 
     There are two attributes which can be changed in any derived class:
@@ -111,7 +114,22 @@ class OwnedDataViewSet(viewsets.GenericViewSet):
     __owned_data_variables: Dict[str, Any] = {}
 
     def __setup_owned_data_variables(self):
-        self.__owned_data_variables["request_user"] = get_user_model().objects.get(id=1)
+        """Prepare required variables for owned data."""
+        # User.
+        if self.request.user.is_authenticated:
+            self.__owned_data_variables["request_user"] = self.request.user
+
+        # Method.
+        if self.action in ("list", "retrieve"):
+            self.__owned_data_variables["request_method"] = CollaborateType.GET
+        elif self.action == "create":
+            self.__owned_data_variables["request_method"] = CollaborateType.POST
+        elif self.action == "update":
+            self.__owned_data_variables["request_method"] = CollaborateType.PUT
+        elif self.action == "partial_update":
+            self.__owned_data_variables["request_method"] = CollaborateType.PATCH
+        elif self.action == "destroy":
+            self.__owned_data_variables["request_method"] = CollaborateType.DELETE
 
     @staticmethod
     def __find_formatted_parameters(query_value: str):
@@ -160,7 +178,8 @@ class OwnedDataViewSet(viewsets.GenericViewSet):
     def __validate_owned_data_fields_type(cls):
         """Validate owned data fields type.
 
-        Raises: ValueError in case of invalid data type.
+        Raises:
+            ValueError: in case of invalid data type.
         """
         if cls.owned_data_fields is None:
             return
@@ -275,6 +294,105 @@ class OwnedDataViewSet(viewsets.GenericViewSet):
             return self.__filter_by_owned_data_fields_by_str_type(queryset)
         return self.__filter_by_owned_data_fields_by_list_type(queryset)
 
+    def __find_collaborator_by_prefix(self, collaborator: str) -> Union[AbstractBaseUser, Group, Permission]:
+        """Find collaborator by prefix.
+
+        Args:
+            collaborator (str): collaborator. e.g. "u:admin".
+
+        Returns:
+            Union[AbstractBaseUser, Group, Permission]: any object that can be used to validate the permission.
+        """
+        prefix, value = collaborator.split(":", maxsplit=1)
+        if prefix == "u":  # User.
+            return get_user_model().objects.get(Q(username=value) | Q(email=value))
+        elif prefix == "g":  # Group.
+            return Group.objects.get(name=value)
+        elif prefix == "p":  # Permission.
+            return Permission.objects.get(Q(name=value) | Q(codename=value))
+        elif prefix == "f":  # Function must return a Group, User, or Permission.
+            return getattr(self, value)()
+        raise ValueError("invalid prefix: %s" %prefix)
+
+    def __validate_owned_data_collaborators_by_list_type(self, collaborators: List[str]):
+        """Validate owned data collaborators by List[str] type.
+        
+        >>> __validate_owned_data_collaborators_by_list_type(["g:admin"])
+        >>> __validate_owned_data_collaborators_by_list_type(["*"])
+
+        Raises:
+            PermissionDenied: in case of permission denied.
+        """
+        # Anyone can collaborate.
+        if "*" in collaborators:
+            return
+
+        # Get user object.
+        user = self.__owned_data_variables.get("request_user")
+        if user is None:
+            raise PermissionDenied
+
+        for collaborator in collaborators:
+            collaborator_obj = self.__find_collaborator_by_prefix(collaborator)
+
+            # User.
+            if isinstance(collaborator_obj, AbstractBaseUser):
+                if user.id != collaborator_obj.id:
+                    raise PermissionDenied
+
+            # Group.
+            elif isinstance(collaborator_obj, Group):
+                try:
+                    user.groups.get(id=collaborator_obj.id)
+                except Group.DoesNotExist:
+                    raise PermissionDenied
+
+            # Permission.
+            elif isinstance(collaborator_obj, Permission):
+                if not user.has_perm(collaborator_obj):
+                    raise PermissionDenied
+
+    def __validate_owned_data_collaborators_by_dict_type(self, collaborators: Dict[Tuple[str], List[str]]):
+        """Validate owned data collaborators by Dict[Tuple[str], List[str]] type.
+
+        Raises:
+            PermissionDenied: in case of permission denied.
+        """
+        # {CollaborateType.POST: {("g:bot", "g:platform"): ["status=in_progress"]}
+        pass
+
+    def __validate_owned_data_collaborators(self):
+        """Validate owned data collaborators.
+        
+        Raises:
+            PermissionDenied: in case of permission denied.
+        """
+        collaborators = self.owned_data_collaborators.get(self.__owned_data_variables["request_method"])
+        if collaborators is None:
+            return
+
+        if isinstance(collaborators, list):
+            self.__validate_owned_data_collaborators_by_list_type(collaborators)
+        else:
+            self.__validate_owned_data_collaborators_by_dict_type(collaborators)
+
+    def __invoke_owned_data(self) -> bool:
+        """Initialize and validate by owned data."""
+        if self.owned_data_fields is None and self.owned_data_collaborators is None:
+            return False
+
+        # Make sure the attributes contain the correct data types.
+        self.__validate_owned_data_fields_type()
+
+        # Prepare required variables for replacement.
+        self.__setup_owned_data_variables()
+
+        # Validate collaborators.
+        if self.owned_data_collaborators is not None:
+            self.__validate_owned_data_collaborators()
+
+        return True
+
     def get_queryset(self) -> QuerySet:
         """DRF built-in method.
 
@@ -284,19 +402,28 @@ class OwnedDataViewSet(viewsets.GenericViewSet):
             QuerySet: filtered queryset.
         """
         queryset = super().get_queryset()
-        if not self.owned_data_fields:
+        if not self.__invoke_owned_data():
             return queryset
 
-        # Make sure the attributes contain the correct data types.
-        self.__validate_owned_data_fields_type()
-
-        # Prepare required variables for replacement.
-        self.__setup_owned_data_variables()
-
         # Filter database records.
-        customized_queryset = self.__filter_by_owned_data_fields(queryset)
+        return self.__filter_by_owned_data_fields(queryset)
 
-        # Validate collaborators.
-        # TODO
+    def create(self, request, *args, **kwargs):
+        """Override the 'create' method to initialize owned data before action."""
+        self.__invoke_owned_data()
+        return super().create(request, *args, **kwargs)
 
-        return customized_queryset
+    def update(self, request, *args, **kwargs):
+        """Override the 'update' method to initialize owned data before action."""
+        self.__invoke_owned_data()
+        return super().update(request, *args, **kwargs)
+
+    def partial_update(self, request, *args, **kwargs):
+        """Override the 'partial_update' method to initialize owned data before action."""
+        self.__invoke_owned_data()
+        return super().partial_update(request, *args, **kwargs)
+
+    def destroy(self, request, *args, **kwargs):
+        """Override the 'destroy' method to initialize owned data before action."""
+        self.__invoke_owned_data()
+        return super().destroy(request, *args, **kwargs)
