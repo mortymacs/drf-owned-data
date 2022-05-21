@@ -1,4 +1,4 @@
-"""OwnedData views implementation."""
+"""Owned Data views implementation."""
 from ast import literal_eval
 from multiprocessing.sharedctypes import Value
 import operator
@@ -18,6 +18,8 @@ from django.contrib.auth.models import Group, Permission, AbstractBaseUser
 
 
 class CollaborateType(Enum):
+    """Collaborate type (HTTP method)."""
+
     GET = "get"
     POST = "post"
     PUT = "put"
@@ -25,45 +27,10 @@ class CollaborateType(Enum):
     DELETE = "delete"
     HEAD = "head"
     OPTIONS = "options"
-    # ALL_EXCEPT_GET = "all_except_get"
 
 
-# class BaseOwnedDataViewSet(ABC):
-#     """Base class for OwnedDataViewSet to fore implementing the required methods."""
-
-#     @abstractmethod
-#     def owned_data_collaborators_on_get(
-#         self, request: "Request", payload: Any, query: Dict, user: Optional["User"]
-#     ) -> bool:
-#         pass
-
-#     @abstractmethod
-#     def owned_data_collaborators_on_post(
-#         self, request: "Request", payload: Any, query: Dict, user: Optional["User"]
-#     ) -> bool:
-#         pass
-
-#     @abstractmethod
-#     def owned_data_collaborators_on_put(
-#         self, request: "Request", payload: Any, query: Dict, user: Optional["User"]
-#     ) -> bool:
-#         pass
-
-#     @abstractmethod
-#     def owned_data_collaborators_on_patch(
-#         self, request: "Request", payload: Any, query: Dict, user: Optional["User"]
-#     ) -> bool:
-#         pass
-
-#     @abstractmethod
-#     def owned_data_collaborators_on_delete(
-#         self, request: "Request", payload: Any, query: Dict, user: Optional["User"]
-#     ) -> bool:
-#         pass
-
-
-class OwnedDataViewSet(viewsets.ModelViewSet): # viewsets.GenericViewSet, 
-    """OwnedData viewset implementation.
+class OwnedDataModelViewSet(viewsets.ModelViewSet): # viewsets.GenericViewSet, 
+    """OwnedData model viewset implementation.
 
     There are two attributes which can be changed in any derived class:
     * owned_data_fields: contains the table fields that the logged-in user has access to.
@@ -131,14 +98,6 @@ class OwnedDataViewSet(viewsets.ModelViewSet): # viewsets.GenericViewSet,
         elif self.action == "destroy":
             self.__owned_data_variables["request_method"] = CollaborateType.DELETE
 
-    @staticmethod
-    def __find_formatted_parameters(query_value: str):
-        """Find formatted parameters in the text.
-
-        Got the idea from: https://stackoverflow.com/a/46161774/2338672
-        """
-        return [d[1] for d in string.Formatter().parse(query_value) if d[1] is not None]
-
     def __parse_owned_data_field_value(
         self, field_value: str
     ) -> Optional[Tuple[str, Callable, Union[str, int, object]]]:
@@ -163,7 +122,7 @@ class OwnedDataViewSet(viewsets.ModelViewSet): # viewsets.GenericViewSet,
             attribute, value = field_value.split("!=", maxsplit=1)
             return attribute, operator.ne, literal_eval(value)
         elif "=" in field_value:
-            attribute, value = field_value.split("!=", maxsplit=1)
+            attribute, value = field_value.split("=", maxsplit=1)
             return attribute, operator.eq, literal_eval(value)
         else:
             # Ignore user data field if the user is not authenticated yet.
@@ -311,7 +270,7 @@ class OwnedDataViewSet(viewsets.ModelViewSet): # viewsets.GenericViewSet,
         elif prefix == "p":  # Permission.
             return Permission.objects.get(Q(name=value) | Q(codename=value))
         elif prefix == "f":  # Function must return a Group, User, or Permission.
-            return getattr(self, value)()
+            return getattr(self, f"owned_data_collaborate_{value}")()
         raise ValueError("invalid prefix: %s" %prefix)
 
     def __validate_owned_data_collaborators_by_list_type(self, collaborators: List[str]):
@@ -352,15 +311,6 @@ class OwnedDataViewSet(viewsets.ModelViewSet): # viewsets.GenericViewSet,
                 if not user.has_perm(collaborator_obj):
                     raise PermissionDenied
 
-    def __validate_owned_data_collaborators_by_dict_type(self, collaborators: Dict[Tuple[str], List[str]]):
-        """Validate owned data collaborators by Dict[Tuple[str], List[str]] type.
-
-        Raises:
-            PermissionDenied: in case of permission denied.
-        """
-        # {CollaborateType.POST: {("g:bot", "g:platform"): ["status=in_progress"]}
-        pass
-
     def __validate_owned_data_collaborators(self):
         """Validate owned data collaborators.
         
@@ -371,10 +321,7 @@ class OwnedDataViewSet(viewsets.ModelViewSet): # viewsets.GenericViewSet,
         if collaborators is None:
             return
 
-        if isinstance(collaborators, list):
-            self.__validate_owned_data_collaborators_by_list_type(collaborators)
-        else:
-            self.__validate_owned_data_collaborators_by_dict_type(collaborators)
+        self.__validate_owned_data_collaborators_by_list_type(collaborators)
 
     def __invoke_owned_data(self) -> bool:
         """Initialize and validate by owned data."""

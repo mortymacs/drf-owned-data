@@ -8,25 +8,6 @@ DjangoRestFramework data ownership library
 pip install drf-owned-data
 ```
 
-To use OwnedData, in views.py we need to get derived of OwnedDataViewSet and define required properties.
-
-Attribute types:
-```python
-owned_data_fields: Optional[List[str]|List[List[str]]] = None
-owned_data_collaborators: Optional[Dict[CollaborateType, Dict[Tuple[str], List[str]]|List[str]]] = None
-```
-
-Methods:
-```python
-def owned_data_collaborators_on_get(self, request: Request, payload: Any, query: Dict, user: Optional[User]) -> bool
-def owned_data_collaborators_on_post(self, request: Request, payload: Any, query: Dict, user: Optional[User]) -> bool
-def owned_data_collaborators_on_put(self, request: Request, payload: Any, query: Dict, user: Optional[User]) -> bool
-def owned_data_collaborators_on_patch(self, request: Request, payload: Any, query: Dict, user: Optional[User]) -> bool
-def owned_data_collaborators_on_delete(self, request: Request, payload: Any, query: Dict, user: Optional[User]) -> bool
-```
-
-These methods have default implementation, change it only **if** you want more customization.
-
 Sample:
 ```python
 owned_data_fields = [
@@ -36,7 +17,7 @@ owned_data_fields = [
 owned_data_collaborators = {
     CollaborateType.GET: ["*"],
     CollaborateType.DELETE: ["g:admin"],
-    CollaborateType.POST: {("g:bot", "g:platform"): ["status=in_progress"]},
+    CollaborateType.POST: ["g:bot", "g:platform"],
 }
 ```
 `owned_data_fields` will be translated into: `Model.filter(user=request.id, comment__user=request.id, title__icontains='draft')`.
@@ -47,12 +28,12 @@ on the owned-data records.
 
 It can be a list of strings like `["user", "author"]` that which will be translated into:
 ```python
-self.get_query().filter(user=request.user, author=request.user)
+self.get_query().filter(Q(user=request.user) & Q(author=request.user))
 ```
 
-It also can be a list of list of strings like ["user", ["author", "is_draft=True"]] which will be translate into:
+It also can be a list of list of strings like `[["user"], ["author", "is_draft=True"]]` which will be translate into:
 ```python
-self.get_query().filter(user=request.user, Q(author=request.user) | Q(is_draft=True))
+self.get_query().filter(Q(user=request.user) | Q(Q(author=request.user) & Q(is_draft=True)))
 ```
 
 Collaborators format:
@@ -65,7 +46,8 @@ Collaborators format:
 | f:     | function    | `["f:validate_permission", "f:Permission.validate"]` |
 | *      | anyone      | `["*"]`                                              |
 
-> **Note:** to use `f:`, if it doesn't have ".", first, it looks for the method inside the current class and if it can't find it, then it looks inside locals.
+> **Note:** to use `f:`, if it doesn't have ".", it looks for the method inside the current class which starts with `owned_data_collaborate_`.
+For example: `owned_data_collaborate_bot`
 
 ## Sample
 
@@ -135,24 +117,25 @@ from owned_data.views import OwnedDataViewSet
 from .serializers import PostSerializer, CommentSerializer
 
 
-class PostViewSet(OwnedDataViewSet, viewsets.ModelViewSet):
+class PostViewSet(OwnedDataModelViewSet):
     owned_data_fields = ["author"]
     owned_data_collaborators = {
         CollaborateType.GET: ["*"],
         CollaborateType.PUT: ["g:editors"],
         CollaborateType.PATCH: ["g:editors"],
-        CollaborateType.DELETE: {("g:bot"): ["is_draft=True"]},
-        CollaborateType.ALL_EXCEPT_GET: ["g:admin"],
+        CollaborateType.DELETE: ["f:bot"],
     }
     serializer_class = PostSerializer
     queryset = Post.objects.all()
 
+    def owned_data_collaborate_bot(self):
+        return Group.objects.get(name="bot")
 
-class CommentViewSet(OwnedDataViewSet, viewsets.ModelViewSet):
+
+class CommentViewSet(OwnedDataModelViewSet):
     owned_data_fields = ["user"]
     owned_data_collaborators = {
         CollaborateType.GET: ["*"],
-        CollaborateType.ALL_EXCEPT_GET: ["g:admin"],
     }
     serializer_class = CommentSerializer
     queryset = Comment.objects.all()
