@@ -1,5 +1,11 @@
 # drf-owned-data
 
+[![GitHub Workflow Status](https://img.shields.io/github/workflow/status/mortymacs/drf-owned-data/Python%20package)](https://github.com/mortymacs/drf-owned-data/actions/workflows/python-test.yml)
+[![PyPi version](https://badgen.net/pypi/v/drf-owned-data/)](https://pypi.org/project/drf-owned-data)
+[![PyPI pyversions](https://img.shields.io/pypi/pyversions/drf-owned-data.svg)](https://pypi.python.org/pypi/drf-owned-data/)
+[![PyPI version fury.io](https://badge.fury.io/py/drf-owned-data.svg)](https://pypi.python.org/pypi/drf-owned-data/)
+[![PyPI download month](https://img.shields.io/pypi/dm/drf-owned-data.svg)](https://pypi.python.org/pypi/drf-owned-data/)
+
 DjangoRestFramework data ownership library
 
 ## Quick Start
