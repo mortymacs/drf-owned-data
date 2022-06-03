@@ -1,12 +1,8 @@
 """Owned Data views implementation."""
 from ast import literal_eval
-from multiprocessing.sharedctypes import Value
 import operator
-from distutils.sysconfig import customize_compiler
-from typing import Any, Dict, Optional, Set, Union, List, Tuple, Callable
-from matplotlib.pyplot import isinteractive
+from typing import Any, Dict, Optional, Union, List, Tuple, Callable
 from rest_framework import viewsets
-import string
 from enum import Enum
 from abcmeta import ABC, abstractmethod
 from django.contrib.auth import get_user_model
@@ -86,6 +82,21 @@ class OwnedDataModelViewSet(viewsets.ModelViewSet):  # viewsets.GenericViewSet,
     owned_data_collaborators: Optional[
         Dict[CollaborateType, Union[List[str], Dict[Tuple[str], List[str]]]]
     ] = None
+
+    # Filter the database records by owned_data_fields.
+    #
+    # For example: Blog posts.
+    # in a blog, /posts endpoint should return all posts
+    # while /my/posts endpoint should only return my posts.
+    # Defaults to True.
+    owned_data_filter_by_fields: bool = True
+
+    # Apply default permissions.
+    # Generally, after migration, Permission model will contain some default
+    # permissions, e.g. "can edit" which is related to an app by ContentType
+    # model. Here, we let them to be considered plus what we're adding as
+    # customized permissions.
+    owned_data_apply_default_permissions: bool = True
 
     # Store temporary data based on the request.
     __owned_data_variables: Dict[str, Any] = {}

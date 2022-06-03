@@ -1,10 +1,10 @@
 from rest_framework import permissions, viewsets
-from owned_data.views import CollaborateType, OwnedDataViewSet
-from .models import Post, Comment
-from .serializers import PostSerializer, CommentSerializer
+from owned_data.drf import CollaborateType, OwnedDataModelViewSet
+from .models import Post
+from .serializers import PostSerializer
 
 
-class PostViewSet(OwnedDataViewSet, viewsets.ModelViewSet):
+class PostViewSet(OwnedDataModelViewSet, viewsets.ModelViewSet):
 
     # owner_fields = ["author", "comments__user"]    # AND
     owned_data_fields = [["author"], ["comments__user"]]  # OR

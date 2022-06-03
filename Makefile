@@ -5,7 +5,7 @@ VENV ?= $(PYTHON) -m venv
 PACKAGE_DIR ?= dist
 PACKAGE_FLAGS ?= sdist --dist-dir $(PACKAGE_DIR)
 
-TEST_ENV_DIR ?= ".test-venv"
+TEST_ENV_DIR ?= "test/.test-venv"
 
 # Prepare test environment.
 @PHONY: test-env
@@ -25,9 +25,12 @@ package:
 # Run integration tests.
 @PHONY: test-integration
 .ONESHELL:
-test-integration: test-env package
+test-integration: cleanup test-env package
 	source $(TEST_ENV_DIR)/bin/activate
 	$(PIP) install $(PACKAGE_DIR)/* -r requirements-dev.txt
+	# Test DRF 'blog' project.
+	cd test/integration/drf/blog
+	./manage.py test
 
 # Cleanup whatever it has built or generated.
 @PHONY: cleanup
