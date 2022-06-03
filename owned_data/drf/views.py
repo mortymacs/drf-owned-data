@@ -13,7 +13,7 @@ from django.contrib.auth import get_user_model
 from django.db.models.query import QuerySet
 from django.db.models import Q
 from django.contrib.auth.models import AnonymousUser
-from rest_framework.exceptions import PermissionDenied
+from rest_framework.exceptions import PermissionDenied, MethodNotAllowed
 from django.contrib.auth.models import Group, Permission, AbstractBaseUser
 
 
@@ -29,7 +29,17 @@ class CollaborateType(Enum):
     OPTIONS = "options"
 
 
-class OwnedDataModelViewSet(viewsets.ModelViewSet): # viewsets.GenericViewSet, 
+_collaborator_type_map = {
+    "list": CollaborateType.GET,
+    "retrieve": CollaborateType.GET,
+    "create": CollaborateType.POST,
+    "update": CollaborateType.PUT,
+    "partial_update": CollaborateType.PATCH,
+    "destroy": CollaborateType.DELETE,
+}
+
+
+class OwnedDataModelViewSet(viewsets.ModelViewSet):  # viewsets.GenericViewSet,
     """OwnedData model viewset implementation.
 
     There are two attributes which can be changed in any derived class:
@@ -87,16 +97,12 @@ class OwnedDataModelViewSet(viewsets.ModelViewSet): # viewsets.GenericViewSet,
             self.__owned_data_variables["request_user"] = self.request.user
 
         # Method.
-        if self.action in ("list", "retrieve"):
-            self.__owned_data_variables["request_method"] = CollaborateType.GET
-        elif self.action == "create":
-            self.__owned_data_variables["request_method"] = CollaborateType.POST
-        elif self.action == "update":
-            self.__owned_data_variables["request_method"] = CollaborateType.PUT
-        elif self.action == "partial_update":
-            self.__owned_data_variables["request_method"] = CollaborateType.PATCH
-        elif self.action == "destroy":
-            self.__owned_data_variables["request_method"] = CollaborateType.DELETE
+        try:
+            self.__owned_data_variables["request_method"] = _collaborator_type_map[
+                self.action
+            ]
+        except KeyError as action_not_found:
+            raise MethodNotAllowed(method=self.action) from action_not_found
 
     def __parse_owned_data_field_value(
         self, field_value: str
@@ -253,7 +259,9 @@ class OwnedDataModelViewSet(viewsets.ModelViewSet): # viewsets.GenericViewSet,
             return self.__filter_by_owned_data_fields_by_str_type(queryset)
         return self.__filter_by_owned_data_fields_by_list_type(queryset)
 
-    def __find_collaborator_by_prefix(self, collaborator: str) -> Union[AbstractBaseUser, Group, Permission]:
+    def __find_collaborator_by_prefix(
+        self, collaborator: str
+    ) -> Union[AbstractBaseUser, Group, Permission]:
         """Find collaborator by prefix.
 
         Args:
@@ -271,11 +279,13 @@ class OwnedDataModelViewSet(viewsets.ModelViewSet): # viewsets.GenericViewSet,
             return Permission.objects.get(Q(name=value) | Q(codename=value))
         elif prefix == "f":  # Function must return a Group, User, or Permission.
             return getattr(self, f"owned_data_collaborate_{value}")()
-        raise ValueError("invalid prefix: %s" %prefix)
+        raise ValueError("invalid prefix: %s" % prefix)
 
-    def __validate_owned_data_collaborators_by_list_type(self, collaborators: List[str]):
+    def __validate_owned_data_collaborators_by_list_type(
+        self, collaborators: List[str]
+    ):
         """Validate owned data collaborators by List[str] type.
-        
+
         >>> __validate_owned_data_collaborators_by_list_type(["g:admin"])
         >>> __validate_owned_data_collaborators_by_list_type(["*"])
 
@@ -313,11 +323,13 @@ class OwnedDataModelViewSet(viewsets.ModelViewSet): # viewsets.GenericViewSet,
 
     def __validate_owned_data_collaborators(self):
         """Validate owned data collaborators.
-        
+
         Raises:
             PermissionDenied: in case of permission denied.
         """
-        collaborators = self.owned_data_collaborators.get(self.__owned_data_variables["request_method"])
+        collaborators = self.owned_data_collaborators.get(
+            self.__owned_data_variables["request_method"]
+        )
         if collaborators is None:
             return
 

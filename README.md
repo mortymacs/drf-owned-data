@@ -1,17 +1,20 @@
-# drf-owned-data
+# Owned Data
 
-[![GitHub Workflow Status](https://img.shields.io/github/workflow/status/mortymacs/drf-owned-data/Python%20package)](https://github.com/mortymacs/drf-owned-data/actions/workflows/python-test.yml)
-[![PyPi version](https://badgen.net/pypi/v/drf-owned-data/)](https://pypi.org/project/drf-owned-data)
-[![PyPI pyversions](https://img.shields.io/pypi/pyversions/drf-owned-data.svg)](https://pypi.python.org/pypi/drf-owned-data/)
-[![PyPI version fury.io](https://badge.fury.io/py/drf-owned-data.svg)](https://pypi.python.org/pypi/drf-owned-data/)
-[![PyPI download month](https://img.shields.io/pypi/dm/drf-owned-data.svg)](https://pypi.python.org/pypi/drf-owned-data/)
+[![GitHub Workflow Status](https://img.shields.io/github/workflow/status/mortymacs/owned_data/Python%20package)](https://github.com/mortymacs/owned_data/actions/workflows/python-test.yml)
+[![PyPi version](https://badgen.net/pypi/v/owned_data/)](https://pypi.org/project/owned_data)
+[![PyPI pyversions](https://img.shields.io/pypi/pyversions/owned_data.svg)](https://pypi.python.org/pypi/owned_data/)
+[![PyPI version fury.io](https://badge.fury.io/py/owned_data.svg)](https://pypi.python.org/pypi/owned_data/)
+[![PyPI download month](https://img.shields.io/pypi/dm/owned_data.svg)](https://pypi.python.org/pypi/owned_data/)
 
-DjangoRestFramework data ownership library
+Data ownership library based on data columns (filter and permission).
+
+Supported frameworks:
+    * DjangoRestFramework
 
 ## Quick Start
 
 ```shell
-pip install drf-owned-data
+pip install owned_data
 ```
 
 Sample:
@@ -157,6 +160,6 @@ That's great if you want to contribute to the project. Please [file an issue](ht
 
 Before sending the PR, please check your changes by `Make test` and `Make lint`.
 
-## License 
+## License
 
 Please read the [license](./LICENSE) agreement.
