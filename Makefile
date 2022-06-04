@@ -30,7 +30,9 @@ test-integration: cleanup test-env package
 	$(PIP) install $(PACKAGE_DIR)/* -r requirements-dev.txt
 	# Test DRF 'blog' project.
 	cd test/integration/drf/blog
-	./manage.py test
+	./manage.py makemigrations
+	./manage.py migrate
+	./manage.py test --failfast
 
 # Cleanup whatever it has built or generated.
 @PHONY: cleanup

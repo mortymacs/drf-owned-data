@@ -5,14 +5,15 @@ from comment.serializers import CommentSerializer
 
 class PostSerializer(serializers.ModelSerializer):
 
-    comments = CommentSerializer(many=True, read_only=True)
-
     class Meta:
         model = Post
         fields = (
             "id",
-            "author",
             "title",
             "body",
-            "comments",
+            "is_draft",
         )
+
+    def validate(self, attrs):
+        attrs["author"] = self.context["request"].user
+        return super().validate(attrs)

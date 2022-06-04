@@ -1,5 +1,8 @@
-from django.test import TestCase
+from rest_framework.test import APITestCase
 
+
+class PostTest(APITestCase):
+    pass
 
 # Defined:
 # 2 posts from User A and User B.

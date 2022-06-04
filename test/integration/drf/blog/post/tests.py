@@ -1,11 +1,37 @@
-from django.test import TestCase
+from rest_framework import status
+from rest_framework.reverse import reverse
+from blog.test import BaseAPITestCase
+
+
+class TestPost(BaseAPITestCase):
+    def test_user_get_empty_list(self):
+        # 1. User A:
+
+        # 1.1 Login.
+        self.fake_user()
+
+        # 1.2 Empty list of posts in his admin panel.
+        response = self.client.get(reverse("post:admin_post-list"))
+        print(response.json())
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.json()), 0)
+
+        # 1.3 Create a new post.
+        response = self.client.post(
+            reverse("post:admin_post-list"),
+            {"title": "user1 post", "body": "content", "is_draft": True},
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        post_id = response.json()["id"]
+        self.assertDictContainsSubset(
+            response.json(),
+            {"id": post_id, "title": "user1 post", "body": "content", "is_draft": True},
+        )
+
+        # 1.4 One item in the list of posts in his admin panel: /me/posts
+
 
 # Senaior:
-# 1. User A:
-# 1.1 Login.
-# 1.2 Empty list of posts in his admin panel.
-# 1.3 Create a new post.
-# 1.4 One item in the list of posts in his admin panel.
 # 1.5 Logout.
 
 # 2. User B:
@@ -35,4 +61,3 @@ from django.test import TestCase
 # 4.3 Should be able to edit both posts.
 # 4.4 Should be able to delete both posts.
 # 4.5 Logout.
-
